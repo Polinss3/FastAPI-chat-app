@@ -6,6 +6,8 @@ services:
     container_name: fastapi_chat
     ports:
       - "8765:8765"
+    env_file: 
+      - .env
 
   frontend:
     build:

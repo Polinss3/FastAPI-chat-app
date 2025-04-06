@@ -10,6 +10,7 @@ class UserOut(BaseModel):
 
 class MessageCreate(BaseModel):
     chat_id: str
+    sender_id: str
     content: str
 
 class MessageOut(BaseModel):

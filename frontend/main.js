@@ -1,9 +1,11 @@
 let ws;
 let currentChatId = "";
 let currentUser = "";
+
 const registerBtn = document.getElementById("registerBtn");
 const loginBtn = document.getElementById("loginBtn");
 const sendBtn = document.getElementById("sendBtn");
+const newChatBtn = document.getElementById("newChatBtn");
 
 const regUsernameInput = document.getElementById("regUsername");
 const regPasswordInput = document.getElementById("regPassword");
@@ -13,10 +15,18 @@ const loginPasswordInput = document.getElementById("loginPassword");
 
 const messageInput = document.getElementById("messageInput");
 const chatBox = document.getElementById("chatBox");
-const usersDiv = document.getElementById("users");
 const chatsDiv = document.getElementById("chats");
-const dashboard = document.getElementById("dashboard");
 const currentChatSpan = document.getElementById("currentChat");
+const currentUserName = document.getElementById("currentUserName");
+
+const authSection = document.getElementById("authSection");
+const dashboard = document.getElementById("dashboard");
+
+// Modal elements
+const newChatModal = document.getElementById("newChatModal");
+const userSelect = document.getElementById("userSelect");
+const modalClose = document.querySelector(".modal-content .close");
+const createChatBtn = document.getElementById("createChatBtn");
 
 // Registro
 registerBtn.addEventListener("click", () => {
@@ -56,37 +66,17 @@ loginBtn.addEventListener("click", () => {
     })
     .then(data => {
       currentUser = username;
-      dashboard.style.display = "block";
-      loadUsers();
-      loadMyChats(currentUser);
-      alert("Login exitoso");
+      authSection.style.display = "none";
+      dashboard.style.display = "flex";
+      currentUserName.textContent = currentUser;
+      loadChats();
     })
     .catch(err => alert(err.message));
 });
 
-// Cargar lista de usuarios
-function loadUsers() {
-  fetch('http://localhost:8765/auth/users')
-    .then(res => res.json())
-    .then(data => {
-      usersDiv.innerHTML = "";
-      data.users.forEach(u => {
-        const div = document.createElement("div");
-        div.textContent = u.username;
-        div.className = "list-item";
-        // Al hacer click se crea un chat entre el usuario actual y el usuario seleccionado
-        div.addEventListener("click", () => {
-          if (u.username === currentUser) return;
-          createChat([currentUser, u.username]);
-        });
-        usersDiv.appendChild(div);
-      });
-    });
-}
-
 // Cargar chats del usuario
-function loadMyChats(username) {
-  fetch(`http://localhost:8765/chat/my_chats/${username}`)
+function loadChats() {
+  fetch(`http://localhost:8765/chat/my_chats/${currentUser}`)
     .then(res => res.json())
     .then(data => {
       chatsDiv.innerHTML = "";
@@ -102,23 +92,6 @@ function loadMyChats(username) {
         });
         chatsDiv.appendChild(div);
       });
-    });
-}
-
-// Crear chat
-function createChat(members) {
-  fetch('http://localhost:8765/chat/create', {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ members })
-  })
-    .then(res => res.json())
-    .then(data => {
-      loadMyChats(currentUser);
-      currentChatId = data.chat._id;
-      currentChatSpan.textContent = members.join(", ");
-      chatBox.innerHTML = "";
-      connectWebSocket(currentChatId);
     });
 }
 
@@ -144,19 +117,119 @@ function connectWebSocket(chatId) {
     console.log("WebSocket connected");
   };
   ws.onmessage = (event) => {
-    const msgDiv = document.createElement("div");
-    msgDiv.textContent = event.data;
-    chatBox.appendChild(msgDiv);
+    try {
+      const msg = JSON.parse(event.data);
+      const msgDiv = document.createElement("div");
+      // Asigna estilos según si el mensaje es del usuario actual o no
+      if (msg.sender_id === currentUser) {
+        msgDiv.className = "my-message";
+      } else {
+        msgDiv.className = "other-message";
+      }
+      msgDiv.textContent = `${msg.sender_id}: ${msg.content}`;
+      chatBox.appendChild(msgDiv);
+      // Desplaza el scroll al final
+      chatBox.scrollTop = chatBox.scrollHeight;
+    } catch (e) {
+      console.error("Error parsing WebSocket message", e);
+    }
   };
   ws.onclose = () => {
     console.log("WebSocket closed");
   };
 }
 
-// Enviar mensaje vía WebSocket
+// Enviar mensaje vía WebSocket y guardar en DB
+// Enviar mensaje vía REST y WebSocket (se mostrará solo al recibirlo por WebSocket)
 sendBtn.addEventListener("click", () => {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  const message = `${currentUser}: ${messageInput.value}`;
-  ws.send(message);
+  if (!currentChatId) {
+    alert("No se ha seleccionado un chat");
+    return;
+  }
+  
+  const content = messageInput.value.trim();
+  if (!content) return;
+  
+  // Construimos el objeto que cumple con el esquema: chat_id, sender_id y content
+  const messageObj = {
+    chat_id: currentChatId,
+    sender_id: currentUser,
+    content: content
+  };
+  
+  // Llamada REST para guardar el mensaje (siempre se guarda, independientemente de la conexión del receptor)
+  fetch('http://localhost:8765/chat/send', {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(messageObj)
+  })
+    .then(res => {
+      if (!res.ok) {
+        console.error("Error al guardar el mensaje:", res.statusText);
+      }
+      return res.json();
+    })
+    .catch(err => console.error(err));
+  
+  // Enviar el mensaje por WebSocket (como JSON)
+  ws.send(JSON.stringify(messageObj));
+  
+  // Borramos el input (no agregamos el mensaje localmente, se mostrará al recibirlo vía WebSocket)
   messageInput.value = "";
+});
+
+
+// Abrir modal para nuevo chat
+newChatBtn.addEventListener("click", () => {
+  newChatModal.style.display = "block";
+  loadUserSelect();
+});
+
+// Cerrar modal
+modalClose.addEventListener("click", () => {
+  newChatModal.style.display = "none";
+});
+window.addEventListener("click", (e) => {
+  if (e.target == newChatModal) {
+    newChatModal.style.display = "none";
+  }
+});
+
+// Cargar select de usuarios para el modal
+function loadUserSelect() {
+  fetch('http://localhost:8765/auth/users')
+    .then(res => res.json())
+    .then(data => {
+      userSelect.innerHTML = `<option value="">Selecciona un usuario</option>`;
+      data.users.forEach(u => {
+        if(u.username !== currentUser) {
+          const option = document.createElement("option");
+          option.value = u.username;
+          option.textContent = u.username;
+          userSelect.appendChild(option);
+        }
+      });
+    });
+}
+
+// Crear nuevo chat desde el modal
+createChatBtn.addEventListener("click", () => {
+  const selectedUser = userSelect.value;
+  if (!selectedUser) return alert("Selecciona un usuario");
+  fetch('http://localhost:8765/chat/create', {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ members: [currentUser, selectedUser] })
+  })
+    .then(res => res.json())
+    .then(data => {
+      newChatModal.style.display = "none";
+      loadChats();
+      currentChatId = data.chat._id;
+      currentChatSpan.textContent = data.chat.members.join(", ");
+      chatBox.innerHTML = "";
+      connectWebSocket(currentChatId);
+    })
+    .catch(err => console.error(err));
 });

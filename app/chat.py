@@ -14,7 +14,7 @@ class ChatCreate(BaseModel):
 async def send_message(msg: MessageCreate):
     message_doc = {
         "chat_id": msg.chat_id,
-        "sender_id": "demo_sender_id",  # En producción usar el ID o username real
+        "sender_id": msg.sender_id,
         "content": msg.content
     }
     await db["messages"].insert_one(message_doc)
