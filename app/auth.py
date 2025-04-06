@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from passlib.context import CryptContext
-from jose import JWTError, jwt
+from jose import jwt
 from datetime import datetime, timedelta
 from .database import db
 from .schemas import UserCreate, UserOut
@@ -21,11 +21,9 @@ def create_token(username: str):
 
 @auth_router.post("/signup", response_model=UserOut)
 async def signup(user: UserCreate):
-    # Comprueba si existe
     existing = await db["users"].find_one({"username": user.username})
     if existing:
         raise HTTPException(status_code=400, detail="Usuario ya existe")
-
     hashed = pwd_context.hash(user.password)
     new_user = {"username": user.username, "hashed_password": hashed}
     await db["users"].insert_one(new_user)
@@ -33,9 +31,14 @@ async def signup(user: UserCreate):
 
 @auth_router.post("/login")
 async def login(user: UserCreate):
-    # Comprueba credenciales
     db_user = await db["users"].find_one({"username": user.username})
     if not db_user or not pwd_context.verify(user.password, db_user["hashed_password"]):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     token = create_token(user.username)
     return {"access_token": token, "token_type": "bearer"}
+
+@auth_router.get("/users")
+async def list_users():
+    users_cursor = db["users"].find({}, {"username": 1, "_id": 0})
+    users = await users_cursor.to_list(None)
+    return {"users": users}

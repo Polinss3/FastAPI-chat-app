@@ -12,4 +12,5 @@ Proyecto de prueba FastAPI + MongoDB para mensajería en tiempo real.
 
 ```bash
 docker build -t fastapi-chat .
-docker run -d -p 8000:8000 -e MONGO_URI="mongodb://<ip_or_host>:27017" fastapi-chat
+docker run -d -p 8765:8765 -e MONGO_URI="mongodb://<ip_or_host>:27017" fastapi-chat
+```

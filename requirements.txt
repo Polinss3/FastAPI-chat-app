@@ -4,3 +4,5 @@ motor
 python-jose
 passlib
 pydantic
+uvicorn[standard]
+websockets

@@ -1,0 +1,18 @@
+services:
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile # Dockerfile raíz (FastAPI)
+    container_name: fastapi_chat
+    ports:
+      - "8765:8765"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile # Dockerfile del front
+    container_name: chat_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - fastapi
